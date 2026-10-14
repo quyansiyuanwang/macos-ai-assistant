@@ -1,0 +1,6 @@
+{
+  "base_url": "https://api.deepseek.com",
+  "api_key": "sk-your-key-here",
+  "model": "deepseek-flash",
+  "max_tokens": 8192
+}

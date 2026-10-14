@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>AiSiri</string>
+    <key>CFBundleDisplayName</key>
+    <string>AiSiri</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.local.aisiri</string>
+    <key>CFBundleVersion</key>
+    <string>1.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleExecutable</key>
+    <string>AiSiri</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>AiSiri 需要使用麦克风进行语音输入。</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>AiSiri 需要语音识别来把你的话转成文字。</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>AiSiri 需要通过 AppleScript 控制音乐、音量、提醒、日历等应用。</string>
+</dict>
+</plist>
