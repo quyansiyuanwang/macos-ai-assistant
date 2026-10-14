@@ -39,11 +39,11 @@ private struct ModelTab: View {
             }
             Section("运行时") {
                 Picker("Agent 运行时", selection: $store.settings.agentRuntime) {
-                    Text("自动（可用则用 pi）").tag("auto")
-                    Text("pi（pi-agent-core + pi-ai）").tag("pi")
-                    Text("内置（Swift 实现）").tag("builtin")
+                    Text("自动（优先 Swift 包）").tag("auto")
+                    Text("Swift 包（PiAI + PiAgentCore）").tag("package")
+                    Text("内置（Swift 手写实现）").tag("builtin")
                 }
-                Text("pi 运行时需要 Node.js 与 agent/ 依赖，build.sh 会自动安装；不可用时自动回退内置实现。")
+                Text("Swift 包运行时直接链接 PiAI + PiAgentCore，运行期零 Node、零额外进程；不可用时自动回退内置实现。")
                     .font(.system(size: 10)).foregroundColor(.secondary)
             }
             Section("生成参数") {

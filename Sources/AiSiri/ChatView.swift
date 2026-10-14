@@ -1,4 +1,6 @@
 import SwiftUI
+import PiAI
+import PiAgentCore
 
 struct Bubble: Identifiable {
     let id = UUID()
@@ -17,9 +19,17 @@ final class ChatModel: ObservableObject {
     /// 窗口是否可见（不可见时不自动接听）
     @Published var windowVisible = false
 
-    let agent = Agent()
+    /// 内置兜底运行时（手写流式客户端 + 工具循环）
+    let agent = BuiltinAgent()
     let speech = SpeechRecognizer()
-    private var piAgent: PiAgentClient?
+
+    /// Swift 包运行时（PiAI + PiAgentCore），运行期零 Node
+    private var packageAgent: Agent?
+    private var packageUnsubscribe: (() -> Void)?
+    private var packageSignature = ""
+    private var packageTask: Task<Void, Never>?
+    private var builtinTask: Task<Void, Never>?
+    private var cancelling = false
 
     private var settings: AppSettings { SettingsStore.shared.settings }
 
@@ -87,76 +97,127 @@ final class ChatModel: ObservableObject {
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !busy else { return }
         input = ""
+        cancelling = false
         bubbles.append(Bubble(role: "user", text: text))
         busy = true
         streaming = ""
         Speaker.shared.configure(settings)
-        if usePiAgent { sendViaPi(text) } else { sendViaBuiltin(text) }
+        if usePackageRuntime { sendViaPackage(text) } else { sendViaBuiltin(text) }
     }
 
-    /// 是否使用 pi Agent 运行时（agent_runtime = auto/pi/builtin）
-    private var usePiAgent: Bool {
-        switch settings.agentRuntime {
-        case "pi": return PiAgentClient.isAvailable
-        case "builtin": return false
-        default: return PiAgentClient.isAvailable
-        }
+    /// 运行时选择：`auto` / `package` 走 Swift 包；`builtin` 走内置实现。
+    private var usePackageRuntime: Bool {
+        settings.agentRuntime == "builtin" ? false : true
+    }
+
+    /// 取消当前回答/工具调用；两条路径都会中止。
+    func cancel() {
+        guard busy else { return }
+        cancelling = true
+        Speaker.shared.stop()
+        builtinTask?.cancel()
+        packageTask?.cancel()
+        if let a = packageAgent { Task { await a.abort() } }
+        streaming = ""
+        busy = false
     }
 
     private func finishRun(answer: String) {
+        let finalText = streaming.isEmpty ? answer : streaming
         if !streaming.isEmpty {
             bubbles.append(Bubble(role: "assistant", text: streaming))
             streaming = ""
         } else if !answer.isEmpty {
             bubbles.append(Bubble(role: "assistant", text: answer))
         }
-        if settings.voiceEnabled { Speaker.shared.say(answer) }
+        if settings.voiceEnabled && !finalText.isEmpty { Speaker.shared.say(finalText) }
         busy = false
         if settings.continuousMode && !settings.voiceEnabled { startVoice() }
     }
 
-    private func sendViaPi(_ text: String) {
-        if piAgent == nil {
-            let c = PiAgentClient()
-            c.onDelta = { [weak self] t in self?.streaming += t }
-            c.onTool = { [weak self] name, args in
-                guard let self else { return }
-                if !self.streaming.isEmpty {
-                    self.bubbles.append(Bubble(role: "assistant", text: self.streaming))
-                    self.streaming = ""
-                }
-                if SettingsStore.shared.settings.showToolCalls {
-                    self.bubbles.append(Bubble(role: "tool", text: "🔧 \(name) \(args)"))
-                }
+    // MARK: - Swift 包运行时（PiAI + PiAgentCore）
+
+    /// 设置（模型 / 系统提示 / 工具开关等）变化时重建 Agent；否则复用同一实例以保留上下文。
+    private func ensurePackageAgent() -> Agent {
+        let sig = packageSignatureValue
+        if let agent = packageAgent, packageSignature == sig { return agent }
+        packageUnsubscribe?()
+        let agent = PackageRuntime.makeAgent(settings)
+        packageUnsubscribe = agent.subscribe { [weak self] event in
+            Task { @MainActor in self?.handlePackageEvent(event) }
+        }
+        packageAgent = agent
+        packageSignature = sig
+        return agent
+    }
+
+    private var packageSignatureValue: String {
+        let s = settings
+        return [s.model, s.baseURL, s.systemPrompt, s.apiKey,
+                String(s.maxTokens), String(s.temperature),
+                s.disabledTools.sorted().joined(separator: ",")].joined(separator: "\u{1F}")
+    }
+
+    private func handlePackageEvent(_ event: AgentEvent) {
+        guard !cancelling else { return }
+        switch event {
+        case .messageUpdate(_, let update):
+            if case .textDelta(let delta) = update { streaming += delta }
+
+        case .toolExecutionStart(_, let name, let arguments):
+            if !streaming.isEmpty {
+                bubbles.append(Bubble(role: "assistant", text: streaming))
+                streaming = ""
             }
-            c.onDone = { [weak self] answer in self?.finishRun(answer: answer) }
-            c.onError = { [weak self] msg in
-                guard let self else { return }
+            if settings.showToolCalls {
+                let args = PackageRuntime.describe(arguments)
+                bubbles.append(Bubble(role: "tool", text: args.isEmpty ? "🔧 \(name)" : "🔧 \(name) \(args)"))
+            }
+
+        case .toolExecutionEnd(_, let name, let result, let isError):
+            if settings.showToolCalls {
+                let text = PackageRuntime.text(of: result.content)
+                bubbles.append(Bubble(role: "tool", text: "\(isError ? "⚠️" : "↳") \(name) → \(text)"))
+            }
+
+        case .agentEnd(let messages):
+            finishRun(answer: PackageRuntime.finalAnswer(in: messages))
+
+        default:
+            break
+        }
+    }
+
+    private func sendViaPackage(_ text: String) {
+        let agent = ensurePackageAgent()
+        packageTask = Task { [weak self] in
+            do {
+                try await agent.prompt(text)
+            } catch {
+                guard let self, !self.cancelling else { return }
+                if error is CancellationError || Task.isCancelled { return }
                 self.streaming = ""
-                self.bubbles.append(Bubble(role: "assistant", text: "⚠️ \(msg)"))
+                self.bubbles.append(Bubble(role: "assistant", text: "⚠️ \(error.localizedDescription)"))
                 self.busy = false
             }
-            piAgent = c
         }
-        guard let c = piAgent, c.start() else {
-            piAgent = nil
-            sendViaBuiltin(text)     // 启动失败则回退内置实现
-            return
-        }
-        c.updateSettings(settings)
-        c.ask(text)
     }
+
+    // MARK: - 内置兜底运行时
 
     private func sendViaBuiltin(_ text: String) {
         agent.settings = settings
-        Task {
+        builtinTask = Task { [weak self] in
+            guard let self else { return }
             do {
-                let answer = try await agent.ask(text)
-                finishRun(answer: answer)
+                let answer = try await self.agent.ask(text)
+                if !self.cancelling { self.finishRun(answer: answer) }
             } catch {
-                streaming = ""
-                bubbles.append(Bubble(role: "assistant", text: "⚠️ \(error.localizedDescription)"))
-                busy = false
+                guard !self.cancelling else { return }
+                if error is CancellationError || Task.isCancelled { return }
+                self.streaming = ""
+                self.bubbles.append(Bubble(role: "assistant", text: "⚠️ \(error.localizedDescription)"))
+                self.busy = false
             }
         }
     }
@@ -181,13 +242,15 @@ final class ChatModel: ObservableObject {
     }
 
     func clear() {
+        cancel()
         speech.stop()
         bubbles.removeAll()
         streaming = ""
         liveTranscript = ""
-        piAgent?.reset()
+        cancelling = false
         agent.settings = settings
         agent.reset()
+        if let packageAgent { Task { await packageAgent.reset() } }
     }
 }
 
@@ -219,6 +282,10 @@ struct ChatView: View {
             Toggle("连续", isOn: $store.settings.continuousMode)
                 .toggleStyle(.switch).controlSize(.mini)
                 .help("开启后：回答朗读完自动接着听，实现纯语音一问一答")
+            if model.busy {
+                Button { model.cancel() } label: { Image(systemName: "stop.circle") }
+                    .buttonStyle(.borderless).help("停止当前回答")
+            }
             Button { onOpenSettings() } label: { Image(systemName: "gearshape") }
                 .buttonStyle(.borderless).help("设置")
             Button { model.clear() } label: { Image(systemName: "trash") }

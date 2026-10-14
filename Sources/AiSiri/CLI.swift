@@ -1,4 +1,5 @@
 import Foundation
+import PiAgentCore
 
 /// 命令行入口，供「快捷指令 / Siri」调用：`AiSiri ask "打开计算器"`
 enum CLI {
@@ -16,7 +17,7 @@ enum CLI {
         case "tools":
             for t in ToolRunner.catalog() { print("\(t.name)\t\(t.desc)") }
         case "agent":
-            runPiAgent(args.dropFirst().joined(separator: " "))
+            runPackageAgent(args.dropFirst().joined(separator: " "))
         case "help", "--help", "-h":
             print("""
             AiSiri 命令行
@@ -24,7 +25,7 @@ enum CLI {
               echo "问题" | AiSiri ask   从标准输入读取问题
               AiSiri tool <name> [json]  直接执行某个本机工具
               AiSiri tools               列出全部工具
-              AiSiri agent "问题"        用 pi Agent 运行时对话（pi-agent-core + pi-ai）
+              AiSiri agent "问题"        用 Swift 包 Agent 运行时对话（PiAI + PiAgentCore）
             """)
         default:
             ask(args.joined(separator: " "))
@@ -45,7 +46,7 @@ enum CLI {
         guard !text.isEmpty else { print("缺少输入"); return }
 
         let sem = DispatchSemaphore(value: 0)
-        let agent = Agent()
+        let agent = BuiltinAgent()
         agent.onTool = { name, result in
             FileHandle.standardError.write(Data("[tool] \(name) → \(result)\n".utf8))
         }
@@ -62,33 +63,49 @@ enum CLI {
         sem.wait()
     }
 
-    /// 使用 pi Agent 运行时（agent/server.mjs）执行一次对话
-    static func runPiAgent(_ prompt: String) {
+    /// 使用 Swift 包运行时（PiAI + PiAgentCore）执行一次对话，运行期零 Node。
+    static func runPackageAgent(_ prompt: String) {
         var text = prompt
         if text.trimmingCharacters(in: .whitespaces).isEmpty {
             let data = FileHandle.standardInput.readDataToEndOfFile()
             text = (String(data: data, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         }
         guard !text.isEmpty else { print("缺少输入"); return }
-        guard PiAgentClient.isAvailable else { print("pi 运行时不可用（需要 Node.js 与 agent/ 依赖）"); return }
 
-        let client = PiAgentClient()
-        var finished = false
-        client.onDelta = { chunk in FileHandle.standardOutput.write(Data(chunk.utf8)) }
-        client.onTool = { name, args in
-            FileHandle.standardError.write(Data("[tool] \(name) \(args)\n".utf8))
+        let settings = SettingsStore.shared.settings
+        guard !settings.apiKey.isEmpty else {
+            FileHandle.standardError.write(Data("错误: 未配置 API Key（请在设置里填写）\n".utf8))
+            return
         }
-        client.onDone = { _ in finished = true }
-        client.onError = { msg in
-            FileHandle.standardError.write(Data("错误: \(msg)\n".utf8))
-            finished = true
+
+        let agent = PackageRuntime.makeAgent(settings)
+        let unsubscribe = agent.subscribe { event in
+            switch event {
+            case .messageUpdate(_, let update):
+                if case .textDelta(let delta) = update {
+                    FileHandle.standardOutput.write(Data(delta.utf8))
+                }
+            case .toolExecutionStart(_, let name, let arguments):
+                let args = PackageRuntime.describe(arguments)
+                FileHandle.standardError.write(Data("[tool] \(name)\(args.isEmpty ? "" : " " + args)\n".utf8))
+            case .toolExecutionEnd(_, let name, _, let isError):
+                FileHandle.standardError.write(Data("[tool] \(name) \(isError ? "error" : "ok")\n".utf8))
+            default:
+                break
+            }
         }
-        guard client.start() else { print("无法启动 pi 运行时"); return }
-        client.ask(text)
-        while !finished {
-            RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.05))
+
+        let sem = DispatchSemaphore(value: 0)
+        Task {
+            do {
+                try await agent.prompt(text)
+            } catch {
+                FileHandle.standardError.write(Data("错误: \(error.localizedDescription)\n".utf8))
+            }
+            sem.signal()
         }
-        client.stop()
+        sem.wait()
+        unsubscribe()
         print("")
     }
 }

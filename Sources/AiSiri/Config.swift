@@ -28,7 +28,7 @@ struct AppSettings: Codable, Equatable {
     var showToolCalls = true
     var alwaysOnTop = false
     var launchAtLogin = true
-    /// Agent 运行时：auto / pi / builtin
+    /// Agent 运行时：auto / package / builtin（不再有 Node）
     var agentRuntime = "auto"
     var disabledTools: [String] = []
 
@@ -80,6 +80,8 @@ struct AppSettings: Codable, Equatable {
         alwaysOnTop = try c.decodeIfPresent(Bool.self, forKey: .alwaysOnTop) ?? false
         launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? true
         agentRuntime = try c.decodeIfPresent(String.self, forKey: .agentRuntime) ?? "auto"
+        // 兼容旧配置：pi 运行时（Node 子进程）已由内建 Swift 包取代
+        if agentRuntime == "pi" { agentRuntime = "package" }
         disabledTools = try c.decodeIfPresent([String].self, forKey: .disabledTools) ?? []
     }
 }

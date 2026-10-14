@@ -115,8 +115,8 @@ final class DeepSeekClient {
     }
 }
 
-/// 带工具调用循环的智能体
-final class Agent {
+/// 带工具调用循环的智能体（内置兜底实现）
+final class BuiltinAgent {
     var settings: AppSettings
     let client: DeepSeekClient
     var messages: [[String: Any]] = []

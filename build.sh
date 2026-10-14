@@ -15,15 +15,6 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/AiSiri"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 
-# pi Agent 运行时（自包含单文件，无需 node_modules）
-if [ -f agent/server.bundle.mjs ]; then
-  mkdir -p "$APP/Contents/Resources/agent"
-  cp agent/server.bundle.mjs "$APP/Contents/Resources/agent/server.bundle.mjs"
-  echo "    pi Agent 运行时已打包（$(du -h agent/server.bundle.mjs | cut -f1)）"
-else
-  echo "⚠️  缺少 agent/server.bundle.mjs，pi 运行时会回退到内置实现"
-fi
-
 echo "==> 临时签名"
 codesign --force --sign - --entitlements Resources/AiSiri.entitlements "$APP" 2>/dev/null || \
 codesign --force --sign - "$APP"
