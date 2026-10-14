@@ -19,6 +19,7 @@ Written in Swift. Builds with the Swift toolchain only — no Xcode project requ
 - Swift toolchain (`swift`). If missing, install the Command Line Tools:
   `xcode-select --install`
 - An API key for an OpenAI-compatible provider
+- Node.js (optional) — only required for the pi agent runtime; without it the app uses the built-in backend
 
 ## Build and install
 
@@ -138,14 +139,16 @@ The assistant supports two backends, selected by the `agent_runtime` setting:
 | `pi` | Node sidecar built on [`@earendil-works/pi-agent-core`](https://www.npmjs.com/package/@earendil-works/pi-agent-core) and [`@earendil-works/pi-ai`](https://www.npmjs.com/package/@earendil-works/pi-ai) |
 | `builtin` | Swift implementation (streaming client and tool-call loop) |
 
-The pi runtime is a Node process (`agent/server.mjs`) that the app starts and drives over
-JSONL on stdin/stdout. It builds a `pi-agent-core` `Agent`, streams through the `pi-ai`
-OpenAI-compatible provider, and registers the local actions as agent tools that invoke
-`aisiri tool <name>`. The Swift side retains ownership of the UI, voice, and the tool
-implementations, so both backends share one set of tools.
+The pi runtime is a Node process that the app starts and drives over JSONL on stdin/stdout.
+It builds a `pi-agent-core` `Agent`, streams through the `pi-ai` OpenAI-compatible provider,
+and registers the local actions as agent tools that invoke `aisiri tool <name>`. The Swift
+side retains ownership of the UI, voice, and the tool implementations, so both backends
+share one set of tools.
 
-`build.sh` installs the `agent/` dependencies with npm and bundles the runtime into the
-app. If Node.js is unavailable, the app falls back to the built-in backend automatically.
+The runtime ships as a single self-contained bundle (`agent/server.bundle.mjs`, about 1.4 MB)
+produced by esbuild, so no `node_modules` or npm install is needed to build or run the app.
+Node.js is required only at runtime for this backend; if it is missing, the app falls back to
+the built-in backend automatically. Regenerate the bundle with `agent/bundle.sh`.
 
 ## Permissions
 

@@ -27,13 +27,18 @@ final class PiAgentClient {
     }
 
     static func serverPath() -> String? {
+        let names = ["server.bundle.mjs", "server.mjs"]
         if let r = Bundle.main.resourceURL {
-            let p = r.appendingPathComponent("agent/server.mjs").path
-            if FileManager.default.fileExists(atPath: p) { return p }
+            for n in names {
+                let p = r.appendingPathComponent("agent/\(n)").path
+                if FileManager.default.fileExists(atPath: p) { return p }
+            }
         }
-        for dev in ["~/AiSiri/agent/server.mjs", "~/macos-ai-assistant/agent/server.mjs"] {
-            let p = NSString(string: dev).expandingTildeInPath
-            if FileManager.default.fileExists(atPath: p) { return p }
+        for dir in ["~/AiSiri/agent", "~/macos-ai-assistant/agent"] {
+            for n in names {
+                let p = NSString(string: "\(dir)/\(n)").expandingTildeInPath
+                if FileManager.default.fileExists(atPath: p) { return p }
+            }
         }
         return nil
     }

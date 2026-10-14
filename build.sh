@@ -15,20 +15,13 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/AiSiri"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 
-# pi Agent 运行时（基于 pi-agent-core + pi-ai）
-if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
-  echo "==> 安装 agent 依赖"
-  (cd agent && npm install --no-audit --no-fund --silent) || echo "⚠️  npm install 失败"
-  if [ -f agent/node_modules/@earendil-works/pi-agent-core/package.json ]; then
-    rm -rf "$APP/Contents/Resources/agent"
-    cp -R agent "$APP/Contents/Resources/agent"
-    rm -rf "$APP/Contents/Resources/agent/node_modules/.bin"
-    echo "    pi Agent 运行时已打包"
-  else
-    echo "⚠️  agent 依赖不完整，pi 运行时会回退到内置实现"
-  fi
+# pi Agent 运行时（自包含单文件，无需 node_modules）
+if [ -f agent/server.bundle.mjs ]; then
+  mkdir -p "$APP/Contents/Resources/agent"
+  cp agent/server.bundle.mjs "$APP/Contents/Resources/agent/server.bundle.mjs"
+  echo "    pi Agent 运行时已打包（$(du -h agent/server.bundle.mjs | cut -f1)）"
 else
-  echo "⚠️  未检测到 Node.js，pi Agent 运行时会回退到内置实现"
+  echo "⚠️  缺少 agent/server.bundle.mjs，pi 运行时会回退到内置实现"
 fi
 
 echo "==> 临时签名"
