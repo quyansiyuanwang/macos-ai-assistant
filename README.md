@@ -11,9 +11,10 @@ Written in Swift. Builds with the Swift toolchain only — no Xcode project requ
 - Global hotkey (default `Option+Space`) to open the window and start listening
 - 25+ local tools for controlling macOS
 - Full settings UI; API key, model, voice, conversation, tools and hotkey are configurable
-- Agent runtime linked directly against the Swift ports
-  [`pi-ai-swift`](../pi-ai-swift) and [`pi-agent-swift`](../pi-agent-swift) —
-  **no Node.js and no extra child processes at runtime**
+- Agent runtime linked directly against the Swift composition layer
+  [`pi-kit-swift`](https://github.com/quyansiyuanwang/pi-kit-swift) (which
+  re-exports `PiAI` and `PiAgentCore`) — **no Node.js and no extra child
+  processes at runtime**
 
 ## Requirements
 
@@ -22,9 +23,9 @@ Written in Swift. Builds with the Swift toolchain only — no Xcode project requ
   `xcode-select --install`
 - An API key for an OpenAI-compatible provider
 
-The agent runtime is compiled into the binary from two local Swift packages
-(`../pi-ai-swift`, `../pi-agent-swift`). Node.js is **not** required, at build
-time or at runtime.
+The agent runtime is compiled into the binary from the `pi-kit-swift` Swift
+package (pinned to `0.1.0`), which re-exports `PiAI` and `PiAgentCore`. Node.js
+is **not** required, at build time or at runtime.
 
 ## Build and install
 
@@ -126,7 +127,7 @@ Environment variables override the config file:
 
 ```bash
 aisiri ask "打开计算器，把音量调到30"     # built-in runtime
-aisiri agent "现在几点？"                 # Swift-package agent runtime (PiAI + PiAgentCore)
+aisiri agent "现在几点？"                 # Swift-package agent runtime (PiKit)
 aisiri tool get_datetime                  # run a single tool
 aisiri tool open_app '{"name":"计算器"}'
 aisiri tools                              # list all tools
@@ -141,13 +142,13 @@ The assistant supports two backends, selected by the `agent_runtime` setting:
 | Value | Backend |
 |---|---|
 | `auto` (default) | The Swift-package runtime |
-| `package` | Swift-package runtime built on [`pi-ai-swift`](../pi-ai-swift) + [`pi-agent-swift`](../pi-agent-swift) |
+| `package` | Swift-package runtime built on [`pi-kit-swift`](https://github.com/quyansiyuanwang/pi-kit-swift) |
 | `builtin` | Hand-written Swift streaming client and tool-call loop |
 
-The package runtime links `PiAI` (`OpenAICompletionsProvider`) and
-`PiAgentCore` (`Agent`, `AgentTool`) directly into the app. It streams chat
-completions, owns the assistant ↔ tool loop, and exposes the same local tool
-implementations (`ToolRunner`) through `PiAgentTool`. Everything runs in-process:
+The package runtime links `PiKit` (the composition layer over
+`PiAI` and `PiAgentCore`) directly into the app. It streams chat completions,
+owns the assistant ↔ tool loop, and exposes the same local tool implementations
+(`ToolRunner`) through `PiKit.FunctionTool`. Everything runs in-process:
 **no Node.js, no sidecar, no extra child process.** Settings for the model,
 system prompt and disabled tools are applied by rebuilding the agent; the
 conversation transcript is preserved while those settings are unchanged.
@@ -179,8 +180,8 @@ AiSiri/
 │   ├── SettingsView.swift  # settings interface
 │   ├── Config.swift        # AppSettings model and SettingsStore
 │   ├── AIClient.swift      # built-in (fallback) streaming client and tool-call loop
-│   ├── PackageRuntime.swift # Swift-package runtime (PiAI model + PiAgentCore.Agent)
-│   ├── Tools.swift         # local tool implementations + PiAgentTool adapter
+│   ├── PackageRuntime.swift # Swift-package runtime (PiKit.AgentKit + AgentConfiguration)
+│   ├── Tools.swift         # local tool implementations + PiKit.FunctionTool adapter
 │   ├── Speech.swift        # speech recognition (silence detection) and synthesis
 │   ├── HotKey.swift        # configurable global hotkey (Carbon)
 │   └── CLI.swift           # aisiri ask / agent / tool / tools
@@ -192,10 +193,11 @@ AiSiri/
 
 ### Runtime dependencies
 
-The `PiAI` and `PiAgentCore` products are pulled from the sibling packages
-`../pi-ai-swift` and `../pi-agent-swift` (local path dependencies in
-`Package.swift`). They are compiled into the `AiSiri` executable, so the built
-app is self-contained and spawns no Node process.
+The `PiKit` product is pulled from the published package
+`https://github.com/quyansiyuanwang/pi-kit-swift.git` (pinned to `0.1.0` in
+`Package.swift`); it in turn depends on `pi-ai-swift` and `pi-agent-swift`.
+Everything is compiled into the `AiSiri` executable, so the built app is
+self-contained and spawns no Node process.
 
 ## License
 

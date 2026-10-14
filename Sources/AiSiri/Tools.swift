@@ -1,6 +1,5 @@
 import Foundation
-import PiAI
-import PiAgentCore
+import PiKit
 
 /// 提供给大模型调用的本机操作工具集（近似 Siri 的能力）
 enum ToolRunner {
@@ -60,18 +59,31 @@ enum ToolRunner {
         }
     }
 
-    // MARK: - Swift 包运行时适配（PiAgentCore.AgentTool）
+    // MARK: - Swift 包运行时适配（PiKit.FunctionTool）
 
-    /// 把 `definitions()` 声明的 JSON schema 包装成 `PiAgentCore.AgentTool`。
+    /// 把 `definitions()` 声明的 JSON schema 包装成 `PiKit.FunctionTool`。
     /// 执行体复用 `ToolRunner.run`，并尊重 `disabledTools`。
     static func packageTools(disabled: [String] = []) -> [any AgentTool] {
         definitions(disabled: disabled).compactMap { d in
             guard let fn = d["function"] as? [String: Any],
                   let name = fn["name"] as? String,
                   let desc = fn["description"] as? String,
-                  let params = fn["parameters"] as? [String: Any] else { return nil }
-            return PiAgentTool(name: name, description: desc, parameters: params)
+                  let params = fn["parameters"] as? [String: Any],
+                  let schema = jsonValue(params) else { return nil }
+            return FunctionTool(name: name, description: desc, parametersJSONSchema: schema) { call, _ in
+                let args = (call.arguments.objectValue ?? [:]).reduce(into: [String: Any]()) { acc, pair in
+                    acc[pair.key] = pair.value.foundationValue
+                }
+                return ToolResult(text: ToolRunner.run(name: name, args: args))
+            }
         }
+    }
+
+    /// 把 Foundation JSON 字典转成 `PiAI.JSONValue`（失败返回 nil）。
+    private static func jsonValue(_ object: [String: Any]) -> JSONValue? {
+        guard let data = try? JSONSerialization.data(withJSONObject: object),
+              let schema = try? JSONDecoder().decode(JSONValue.self, from: data) else { return nil }
+        return schema
     }
 
     // MARK: - 执行分发
@@ -300,33 +312,12 @@ enum ToolRunner {
     }
 }
 
-// MARK: - PiAgentCore 适配
+// MARK: - PiKit 适配
 
-/// 把本机工具暴露给 `PiAgentCore.Agent`。
-///
-/// 声明来自 `ToolRunner.definitions()` 的 JSON schema（构造时转成
-/// `PiAI.JSONValue`，因此结构体本身满足 `Sendable`），执行时把模型给出的
-/// `JSONValue` 参数还原为 Foundation 字典并交给 `ToolRunner.run`。
-struct PiAgentTool: AgentTool {
-    let name: String
-    let description: String
-    let parametersJSONSchema: JSONValue
-
-    init?(name: String, description: String, parameters: [String: Any]) {
-        guard let data = try? JSONSerialization.data(withJSONObject: parameters),
-              let schema = try? JSONDecoder().decode(JSONValue.self, from: data) else { return nil }
-        self.name = name
-        self.description = description
-        self.parametersJSONSchema = schema
-    }
-
-    func execute(_ call: ToolCall, onUpdate: ((ToolResult) -> Void)?) async throws -> ToolResult {
-        let args = (call.arguments.objectValue ?? [:]).reduce(into: [String: Any]()) { acc, pair in
-            acc[pair.key] = pair.value.foundationValue
-        }
-        return ToolResult(text: ToolRunner.run(name: name, args: args))
-    }
-}
+// 本机工具经 `ToolRunner.packageTools` 以 `PiKit.FunctionTool` 暴露给
+// `PiAgentCore.Agent`：声明取自 `ToolRunner.definitions()` 的 JSON schema，
+// 执行时把模型给出的 `JSONValue` 参数还原为 Foundation 字典后交给
+// `ToolRunner.run`。
 
 extension JSONValue {
     /// 转回 `ToolRunner.run` 需要的 Foundation 表示（String / Int / Double /

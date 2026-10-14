@@ -1,6 +1,5 @@
 import SwiftUI
-import PiAI
-import PiAgentCore
+import PiKit
 
 struct Bubble: Identifiable {
     let id = UUID()

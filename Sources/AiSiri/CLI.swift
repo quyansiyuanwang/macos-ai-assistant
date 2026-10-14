@@ -1,5 +1,5 @@
 import Foundation
-import PiAgentCore
+import PiKit
 
 /// 命令行入口，供「快捷指令 / Siri」调用：`AiSiri ask "打开计算器"`
 enum CLI {

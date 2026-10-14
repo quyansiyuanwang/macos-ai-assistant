@@ -1,0 +1,33 @@
+{
+  "originHash" : "1228f25d59509f405f282117196b883dbc1aed2b777b2e7479a9efcde2e1d210",
+  "pins" : [
+    {
+      "identity" : "pi-agent-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/quyansiyuanwang/pi-agent-swift.git",
+      "state" : {
+        "revision" : "8c2940efb7ecda8feca833857b3d6f8e162a3f52",
+        "version" : "0.1.0"
+      }
+    },
+    {
+      "identity" : "pi-ai-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/quyansiyuanwang/pi-ai-swift.git",
+      "state" : {
+        "revision" : "1ce543272c1d8e8a87a3f0be65964470a939cc51",
+        "version" : "0.1.0"
+      }
+    },
+    {
+      "identity" : "pi-kit-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/quyansiyuanwang/pi-kit-swift.git",
+      "state" : {
+        "revision" : "f486c362e912c775e5135c93028a34b8a3320331",
+        "version" : "0.1.0"
+      }
+    }
+  ],
+  "version" : 3
+}

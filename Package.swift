@@ -5,15 +5,14 @@ let package = Package(
     name: "AiSiri",
     platforms: [.macOS(.v13)],
     dependencies: [
-        .package(path: "../pi-ai-swift"),
-        .package(path: "../pi-agent-swift"),
+        // 组合层包：@_exported 了 PiAI 与 PiAgentCore，App 只依赖这一层
+        .package(url: "https://github.com/quyansiyuanwang/pi-kit-swift.git", exact: "0.1.0"),
     ],
     targets: [
         .executableTarget(
             name: "AiSiri",
             dependencies: [
-                .product(name: "PiAI", package: "pi-ai-swift"),
-                .product(name: "PiAgentCore", package: "pi-agent-swift"),
+                .product(name: "PiKit", package: "pi-kit-swift"),
             ],
             path: "Sources/AiSiri",
             swiftSettings: [.swiftLanguageMode(.v5)]
