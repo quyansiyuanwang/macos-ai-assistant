@@ -19,6 +19,7 @@ final class ChatModel: ObservableObject {
 
     let agent = Agent()
     let speech = SpeechRecognizer()
+    private var piAgent: PiAgentClient?
 
     private var settings: AppSettings { SettingsStore.shared.settings }
 
@@ -89,26 +90,73 @@ final class ChatModel: ObservableObject {
         bubbles.append(Bubble(role: "user", text: text))
         busy = true
         streaming = ""
-        agent.settings = settings
         Speaker.shared.configure(settings)
+        if usePiAgent { sendViaPi(text) } else { sendViaBuiltin(text) }
+    }
 
+    /// 是否使用 pi Agent 运行时（agent_runtime = auto/pi/builtin）
+    private var usePiAgent: Bool {
+        switch settings.agentRuntime {
+        case "pi": return PiAgentClient.isAvailable
+        case "builtin": return false
+        default: return PiAgentClient.isAvailable
+        }
+    }
+
+    private func finishRun(answer: String) {
+        if !streaming.isEmpty {
+            bubbles.append(Bubble(role: "assistant", text: streaming))
+            streaming = ""
+        } else if !answer.isEmpty {
+            bubbles.append(Bubble(role: "assistant", text: answer))
+        }
+        if settings.voiceEnabled { Speaker.shared.say(answer) }
+        busy = false
+        if settings.continuousMode && !settings.voiceEnabled { startVoice() }
+    }
+
+    private func sendViaPi(_ text: String) {
+        if piAgent == nil {
+            let c = PiAgentClient()
+            c.onDelta = { [weak self] t in self?.streaming += t }
+            c.onTool = { [weak self] name, args in
+                guard let self else { return }
+                if !self.streaming.isEmpty {
+                    self.bubbles.append(Bubble(role: "assistant", text: self.streaming))
+                    self.streaming = ""
+                }
+                if SettingsStore.shared.settings.showToolCalls {
+                    self.bubbles.append(Bubble(role: "tool", text: "🔧 \(name) \(args)"))
+                }
+            }
+            c.onDone = { [weak self] answer in self?.finishRun(answer: answer) }
+            c.onError = { [weak self] msg in
+                guard let self else { return }
+                self.streaming = ""
+                self.bubbles.append(Bubble(role: "assistant", text: "⚠️ \(msg)"))
+                self.busy = false
+            }
+            piAgent = c
+        }
+        guard let c = piAgent, c.start() else {
+            piAgent = nil
+            sendViaBuiltin(text)     // 启动失败则回退内置实现
+            return
+        }
+        c.updateSettings(settings)
+        c.ask(text)
+    }
+
+    private func sendViaBuiltin(_ text: String) {
+        agent.settings = settings
         Task {
             do {
                 let answer = try await agent.ask(text)
-                if !streaming.isEmpty {
-                    bubbles.append(Bubble(role: "assistant", text: streaming))
-                    streaming = ""
-                } else if !answer.isEmpty {
-                    bubbles.append(Bubble(role: "assistant", text: answer))
-                }
-                if settings.voiceEnabled { Speaker.shared.say(answer) }
+                finishRun(answer: answer)
             } catch {
                 streaming = ""
                 bubbles.append(Bubble(role: "assistant", text: "⚠️ \(error.localizedDescription)"))
-            }
-            busy = false
-            if settings.continuousMode && !settings.voiceEnabled {
-                startVoice()
+                busy = false
             }
         }
     }
@@ -137,6 +185,7 @@ final class ChatModel: ObservableObject {
         bubbles.removeAll()
         streaming = ""
         liveTranscript = ""
+        piAgent?.reset()
         agent.settings = settings
         agent.reset()
     }

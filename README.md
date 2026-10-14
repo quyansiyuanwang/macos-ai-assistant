@@ -11,7 +11,7 @@ Written in Swift. Builds with the Swift toolchain only — no Xcode project requ
 - Global hotkey (default `Option+Space`) to open the window and start listening
 - 25+ local tools for controlling macOS
 - Full settings UI; API key, model, voice, conversation, tools and hotkey are configurable
-- Optional [pi](https://pi.dev) package that exposes the same actions as agent tools
+- Optional agent runtime built on pi sub-packages (`@earendil-works/pi-agent-core`, `pi-ai`)
 
 ## Requirements
 
@@ -103,6 +103,7 @@ Changes are saved immediately to `~/.config/aisiri/config.json` (mode `0600`).
 | `show_tool_calls` | bool | `true` | Show tool invocations in the transcript |
 | `always_on_top` | bool | `false` | Keep the window above other windows |
 | `launch_at_login` | bool | `true` | Register a login item |
+| `agent_runtime` | string | `auto` | Backend: `auto`, `pi`, or `builtin` |
 | `disabled_tools` | string[] | `[]` | Tool names the model may not use |
 
 ### Environment variables
@@ -126,18 +127,24 @@ aisiri tools                              # list all tools
 
 `aisiri ask` also reads the prompt from stdin when no argument is given.
 
-## pi integration
+## Agent runtime
 
-The `pi-package/` directory is a [pi](https://pi.dev) package that registers the local
-actions as `mac_*` tools and ships an `aisiri-mac` skill. It calls
-`aisiri tool <name> '<json>'`, so the implementation is shared with the app.
+The assistant supports two backends, selected by the `agent_runtime` setting:
 
-```bash
-./build.sh                        # produce ~/.local/bin/aisiri
-pi install ./pi-package           # install the package
-```
+| Value | Backend |
+|---|---|
+| `auto` (default) | Uses the pi runtime when available, otherwise the built-in one |
+| `pi` | Node sidecar built on [`@earendil-works/pi-agent-core`](https://www.npmjs.com/package/@earendil-works/pi-agent-core) and [`@earendil-works/pi-ai`](https://www.npmjs.com/package/@earendil-works/pi-ai) |
+| `builtin` | Swift implementation (streaming client and tool-call loop) |
 
-See [pi-package/README.md](pi-package/README.md) for details.
+The pi runtime is a Node process (`agent/server.mjs`) that the app starts and drives over
+JSONL on stdin/stdout. It builds a `pi-agent-core` `Agent`, streams through the `pi-ai`
+OpenAI-compatible provider, and registers the local actions as agent tools that invoke
+`aisiri tool <name>`. The Swift side retains ownership of the UI, voice, and the tool
+implementations, so both backends share one set of tools.
+
+`build.sh` installs the `agent/` dependencies with npm and bundles the runtime into the
+app. If Node.js is unavailable, the app falls back to the built-in backend automatically.
 
 ## Permissions
 
@@ -162,12 +169,13 @@ AiSiri/
 │   ├── ChatView.swift      # chat window, streaming rendering, transcription handling
 │   ├── SettingsView.swift  # settings interface
 │   ├── Config.swift        # AppSettings model and SettingsStore
-│   ├── AIClient.swift      # streaming client and tool-call loop
+│   ├── AIClient.swift      # built-in streaming client and tool-call loop
+│   ├── PiAgentClient.swift # client for the pi-based Node agent runtime
 │   ├── Tools.swift         # local tool implementations
 │   ├── Speech.swift        # speech recognition (silence detection) and synthesis
 │   ├── HotKey.swift        # configurable global hotkey (Carbon)
 │   └── CLI.swift           # aisiri ask / tool / tools
-├── pi-package/             # pi package (extension and skill)
+├── agent/                  # Node agent runtime built on pi-agent-core + pi-ai
 ├── Resources/              # Info.plist, entitlements
 ├── config.example.json
 ├── build.sh

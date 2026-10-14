@@ -37,6 +37,15 @@ private struct ModelTab: View {
                 Text("任何 OpenAI 兼容端点都可用（DeepSeek / OpenAI / Ollama 等）")
                     .font(.system(size: 10)).foregroundColor(.secondary)
             }
+            Section("运行时") {
+                Picker("Agent 运行时", selection: $store.settings.agentRuntime) {
+                    Text("自动（可用则用 pi）").tag("auto")
+                    Text("pi（pi-agent-core + pi-ai）").tag("pi")
+                    Text("内置（Swift 实现）").tag("builtin")
+                }
+                Text("pi 运行时需要 Node.js 与 agent/ 依赖，build.sh 会自动安装；不可用时自动回退内置实现。")
+                    .font(.system(size: 10)).foregroundColor(.secondary)
+            }
             Section("生成参数") {
                 Stepper("最大 tokens：\(store.settings.maxTokens)", value: $store.settings.maxTokens, in: 256...131072, step: 256)
                 HStack {

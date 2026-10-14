@@ -28,6 +28,8 @@ struct AppSettings: Codable, Equatable {
     var showToolCalls = true
     var alwaysOnTop = false
     var launchAtLogin = true
+    /// Agent 运行时：auto / pi / builtin
+    var agentRuntime = "auto"
     var disabledTools: [String] = []
 
     static let defaultSystemPrompt = """
@@ -52,6 +54,7 @@ struct AppSettings: Codable, Equatable {
         case autoSendOnSilence = "auto_send_on_silence", continuousMode = "continuous_mode"
         case hotkey, showToolCalls = "show_tool_calls"
         case alwaysOnTop = "always_on_top", launchAtLogin = "launch_at_login"
+        case agentRuntime = "agent_runtime"
         case disabledTools = "disabled_tools"
     }
 
@@ -76,6 +79,7 @@ struct AppSettings: Codable, Equatable {
         showToolCalls = try c.decodeIfPresent(Bool.self, forKey: .showToolCalls) ?? true
         alwaysOnTop = try c.decodeIfPresent(Bool.self, forKey: .alwaysOnTop) ?? false
         launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? true
+        agentRuntime = try c.decodeIfPresent(String.self, forKey: .agentRuntime) ?? "auto"
         disabledTools = try c.decodeIfPresent([String].self, forKey: .disabledTools) ?? []
     }
 }
