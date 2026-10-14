@@ -119,7 +119,8 @@ Environment variables override the config file:
 ## Command-line interface
 
 ```bash
-aisiri ask "打开计算器，把音量调到30"     # chat + execute tools
+aisiri ask "打开计算器，把音量调到30"     # built-in runtime
+aisiri agent "现在几点？"                 # pi agent runtime
 aisiri tool get_datetime                  # run a single tool
 aisiri tool open_app '{"name":"计算器"}'
 aisiri tools                              # list all tools
