@@ -34,7 +34,7 @@ final class PiAgentClient {
                 if FileManager.default.fileExists(atPath: p) { return p }
             }
         }
-        for dir in ["~/AiSiri/agent", "~/macos-ai-assistant/agent"] {
+        for dir in ["~/Development/macos-ai-assistant/agent", "~/AiSiri/agent", "~/macos-ai-assistant/agent"] {
             for n in names {
                 let p = NSString(string: "\(dir)/\(n)").expandingTildeInPath
                 if FileManager.default.fileExists(atPath: p) { return p }

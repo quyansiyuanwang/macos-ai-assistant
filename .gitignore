@@ -1,6 +1,10 @@
 # 构建产物
 .build/
+.swiftpm/
 *.app
+
+# 上游参考（本地，不入库）
+.tmp/
 
 # macOS
 .DS_Store
